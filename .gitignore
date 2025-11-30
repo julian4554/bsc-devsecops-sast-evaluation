@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# virtual environment
+venv/
+.env/
+.venv/
+
+# Flask instance folder
+instance/
+
+# SQLite databases
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+
+
+# PyCharm
+.idea/
+
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Test cache
+.cache/
+pytest_cache/
+
+# Logs
+*.log
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# MacOS
+.DS_Store
+
+# GitHub Actions artifacts
+*.sarif
