@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h2>Dashboard</h2>
+
+    <button onclick="logout()">Logout</button>
+
+    <hr>
+
+    <h3>Search Patient</h3>
+    <input id="searchInput" placeholder="Enter patient name...">
+    <button onclick="searchPatients()">Search</button>
+
+    <div id="message"></div>
+
+    <ul id="results"></ul>
+
+    <hr>
+
+    <h3>Actions</h3>
+    <button onclick="goToAppointment()">Create Appointment</button>
+
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+
+</body>
+</html>

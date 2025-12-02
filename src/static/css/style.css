@@ -1,0 +1,89 @@
+/* Global basic reset */
+body {
+    margin: 0;
+    padding: 0;
+    background: #f7f7f7;
+    font-family: Arial, sans-serif;
+}
+
+/* Container for login and simple pages */
+.container, .login-container {
+    width: 320px;
+    margin: 60px auto;
+    padding: 25px;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+
+/* Headings */
+h1, h2, h3 {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* Form inputs */
+input, select, textarea {
+    width: 100%;
+    padding: 10px;
+    margin-top: 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 18px;
+    background: #007bff;
+    color: white;
+    font-size: 15px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+/* Error / info messages */
+#message, .error, .info {
+    margin-top: 12px;
+    min-height: 20px;
+    font-size: 14px;
+    text-align: center;
+}
+
+.error {
+    color: #b10000;
+}
+
+.info {
+    color: #007bff;
+}
+
+/* Lists for search results */
+ul {
+    list-style: none;
+    padding: 0;
+    margin-top: 20px;
+}
+
+li {
+    background: #fff;
+    margin-bottom: 10px;
+    padding: 12px;
+    border-radius: 6px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    cursor: pointer;
+}
+
+li:hover {
+    background: #eaf3ff;
+}

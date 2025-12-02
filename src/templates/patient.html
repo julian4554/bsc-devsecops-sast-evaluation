@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Patient Details</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+    <h2>Patient Details</h2>
+
+    <div id="patient-info" class="info-box">
+        <p><strong>Name:</strong> <span id="name"></span></p>
+        <p><strong>Diagnosis:</strong> <span id="diagnosis"></span></p>
+        <p><strong>Birthdate:</strong> <span id="birthdate"></span></p>
+        <p><strong>MRN:</strong> <span id="insurance"></span></p>
+    </div>
+
+    <hr>
+
+    <!-- Diagnosis Update (doctor only) -->
+    <h3>Update Diagnosis</h3>
+    <input id="newDiagnosis" placeholder="New diagnosis">
+    <button onclick="updateDiagnosis()">Update</button>
+
+    <div id="message" class="info"></div>
+
+    <hr>
+
+    <button onclick="goBack()">Back to Dashboard</button>
+    <button onclick="openFHIR()">View in FHIR Format</button>
+</div>
+
+<!-- Patient ID injected by server -->
+<script>
+    const PATIENT_ID = {{ patient_id }};
+</script>
+
+<script src="/static/js/patient.js"></script>
+
+</body>
+</html>

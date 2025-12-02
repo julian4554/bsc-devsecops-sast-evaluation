@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>FHIR Patient Viewer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h2>FHIR Patient Resource</h2>
+
+    <div id="message"></div>
+
+    <pre id="fhirOutput">Loading...</pre>
+
+    <hr>
+
+    <button onclick="goBack()">Back to Patient</button>
+
+</div>
+
+<script>
+    const PATIENT_ID = {{ patient_id }};
+</script>
+<script src="/static/js/fhir.js"></script>
+
+</body>
+</html>

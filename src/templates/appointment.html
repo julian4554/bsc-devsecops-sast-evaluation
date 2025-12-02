@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Appointment</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <h2>Create Appointment</h2>
+    <p>Fill in the form to create a new appointment.</p>
+
+    <!-- Patient ID -->
+    <label>Patient ID</label>
+    <input id="patientId" type="number" placeholder="Patient ID">
+
+    <!-- Date -->
+    <label>Date</label>
+    <input id="date" type="datetime-local">
+
+    <!-- Description -->
+    <label>Description</label>
+    <input id="description" type="text" placeholder="Description">
+
+    <button onclick="createAppointment()">Create</button>
+
+    <div id="message" class="info"></div>
+
+    <hr>
+
+    <button onclick="goBack()">Back to Dashboard</button>
+
+</div>
+
+<script src="/static/js/appointment.js"></script>
+</body>
+</html>
