@@ -19,7 +19,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Python (for Semgrep)
+      - name: Install Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
@@ -29,16 +29,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      - name: Run Semgrep security scan
+      - name: Run Semgrep security scan (non-blocking)
         run: |
-          run: semgrep --config=auto --json > semgrep-results.json || true
+          semgrep --config=auto --json > semgrep-results.json || true
 
-
-      - name: Convert Semgrep results to SARIF
+      - name: Generate SARIF
         run: |
-          run: semgrep --config=auto --sarif > semgrep.sarif || true
+          semgrep --config=auto --sarif > semgrep.sarif || true
 
-      - name: Upload SARIF results to GitHub
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
