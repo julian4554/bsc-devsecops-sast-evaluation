@@ -29,6 +29,7 @@ def search_patients():
     query = params["q"].strip()
 
     try:
+        unsafe_sql = f"SELECT * FROM patients WHERE first_name LIKE '%{query}%'"
         results = fetch_all(
             """
             SELECT id, first_name, last_name
