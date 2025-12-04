@@ -68,12 +68,46 @@ def create_app():
     # Security Headers (TR-03161)
     # =============================
     @app.after_request
+    # src/app.py (Auszug)
+
+    # =============================
+    # Security Headers (TR-03161)
+    # =============================
+    @app.after_request
     def set_security_headers(response):
-        response.headers["X-Frame-Options"] = "DENY"
+        # ----------------------------------------------------
+        # BSI TR-03161 O.Arch_9: HSTS + CSP + X-Frame-Options
+        # ----------------------------------------------------
+
+        # Basis-Header (aus Original-Code, bereinigt):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
+
+        # HSTS (O.Arch_9)
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+        # Content Security Policy (O.Arch_9)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self'; "
+            "img-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none'; "
+        )
+
+        # Clickjacking-Schutz (X-Frame-Options):
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # ----------------------------------------------------
+        # Zusätzliche moderne Cross-Origin-Schutzmechanismen:
+        # ----------------------------------------------------
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+
         return response
 
     # =============================
