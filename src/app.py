@@ -1,15 +1,20 @@
 # src/app.py
+import os
 from flask import Flask, render_template, jsonify
+
+# API Blueprints
 from api.auth import auth_bp
 from api.patient import patient_bp
 from api.search import search_bp
 from api.appointments import appointments_bp
 from api.stats import stats_bp
 from api.fhir import fhir_bp
-from config import Config
 
-# Authentication Loader (setzt g.current_user)
+# Middleware
 from utils.auth_middleware import load_current_user
+
+# Configs (Secure-by-Default)
+from config import DevelopmentConfig, ProductionConfig
 
 
 def create_app():
@@ -22,13 +27,23 @@ def create_app():
         static_folder="static"
     )
 
-    # sichere Config laden
-    app.config.from_object(Config)
+    # =============================
+    # Sichere Konfiguration (O.Source_6)
+    # =============================
+    # Logik umgedreht: Standard ist Production (Sicher)
+    # Nur wenn explizit 'development' gesetzt ist, wird der Dev-Modus aktiviert.
+    env_state = os.environ.get("FLASK_ENV", "production").lower()
 
-    # SECRET_KEY setzen
+    if env_state == "development":
+        print("[WARNING] Running in Development Mode - Unsafe for Production!")
+        app.config.from_object(DevelopmentConfig)
+    else:
+        app.config.from_object(ProductionConfig)
+
+    # SECRET_KEY setzen (wird aus Config geladen)
     app.secret_key = app.config["SECRET_KEY"]
 
-    # Authentication Middleware registrieren
+    # Authentication Middleware laden
     load_current_user(app)
 
     # =============================
@@ -67,37 +82,18 @@ def create_app():
     # =========================================================================
     # SICHERHEITS-HEADER (IMPLEMENTIERUNG NACH BSI TR-03161 O.Arch_9)
     # =========================================================================
-    # ZWECK:
-    # Härtung der Webanwendung gegen Client-Side-Attacken wie XSS, Clickjacking
-    # und MIME-Sniffing durch Setzen von HTTP-Response-Header.
-    #
-    #
-    # Manuelle Implementierung ("Hardcoded Strings") statt Nutzung externer
-    # Bibliotheken (z.B. Flask-Talisman, Secure).
-    #
-    # BEGRÜNDUNG:
-    # 1. Transparenz für SAST-Tools: CodeQL und Semgrep können explizite
-    #    Header-Strings und deren Werte direkt im AST (Abstract Syntax Tree)
-    #    analysieren. Weniger Blackbox Gefühl.
-    # 2. Evaluierbarkeit: Ermöglicht das gezielte Einbauen von Fehlkonfigurationen
-    #    (z.B. schwache CSP), um die Erkennungsleistung der Tools zu messen.
-    # =========================================================================
     @app.after_request
     def set_security_headers(response):
-        # ----------------------------------------------------
-        # BSI TR-03161 O.Arch_9: HSTS + CSP + X-Frame-Options
-        # ----------------------------------------------------
-
-        # Basis-Header (aus Original-Code, bereinigt):
+        # Basis-Header
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
 
-        # HSTS (O.Arch_9)
+        # HSTS (HTTPS-Pflicht) - 1 Jahr
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
-        # Content Security Policy (O.Arch_9)
+        # CSP: Keine fremden Skripte oder Inhalte
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self'; "
@@ -107,12 +103,10 @@ def create_app():
             "frame-ancestors 'none'; "
         )
 
-        # Clickjacking-Schutz (X-Frame-Options):
+        # Clickjacking-Schutz
         response.headers["X-Frame-Options"] = "DENY"
 
-        # ----------------------------------------------------
-        # Zusätzliche moderne Cross-Origin-Schutzmechanismen:
-        # ----------------------------------------------------
+        # Zusätzliche moderne Cross-Origin-Schutzmechanismen
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
@@ -120,7 +114,7 @@ def create_app():
         return response
 
     # =============================
-    # Error Handler (TR-03161)
+    # Error Handler
     # =============================
     @app.errorhandler(404)
     def not_found(_):
@@ -133,6 +127,9 @@ def create_app():
     return app
 
 
+# =============================
+# App starten
+# =============================
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=app.config["DEBUG"])
+    app.run()
