@@ -8,11 +8,6 @@
 # - Token-Generierung
 # - Rollenbasierte Zugriffskontrolle (RBAC)
 #
-# Enthält NICHT:
-# - Datenbankzugriffe  (→ ausgelagert nach session_service.py)
-# - Session-Logik (→ session_service.py)
-#
-# Dadurch KEINE circular imports möglich.
 # ============================================================
 
 import base64

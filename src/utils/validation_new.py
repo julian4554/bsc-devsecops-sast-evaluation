@@ -1,57 +1,60 @@
-# src/utils/validation_new.py
 from functools import wraps
 from flask import request, jsonify
 from marshmallow import Schema, fields, ValidationError, validates
+from marshmallow.validate import Length
 
 
 # ============================================================
 # LOGIN SCHEMA
 # ============================================================
 class LoginSchema(Schema):
-    username = fields.Str(required=True)
-    password = fields.Str(required=True)
+    username = fields.Str(required=True, validate=Length(min=1, max=100))
+    password = fields.Str(required=True, validate=Length(min=1, max=200))
 
 
 # ============================================================
-# PATIENT SEARCH SCHEMA (via POST – unused optional)
+# PATIENT SEARCH SCHEMA (POST – optional)
 # ============================================================
 class PatientSearchSchema(Schema):
-    name = fields.Str(required=False)
-    mrn = fields.Str(required=False)
+    name = fields.Str(required=False, validate=Length(max=100))
+    mrn = fields.Str(required=False, validate=Length(max=50))
     date_of_birth = fields.Date(required=False)
 
 
 # ============================================================
-# PATIENT CREATE (optional, not yet implemented)
+# PATIENT CREATE (not yet implemented)
 # ============================================================
 class PatientCreateSchema(Schema):
-    first_name = fields.Str(required=True)
-    last_name = fields.Str(required=True)
+    first_name = fields.Str(required=True, validate=Length(min=1, max=100))
+    last_name = fields.Str(required=True, validate=Length(min=1, max=100))
     birthdate = fields.Date(required=True)
-    mrn = fields.Str(required=True)
-    diagnosis = fields.Str(required=False)
+    mrn = fields.Str(required=True, validate=Length(min=1, max=50))
+    diagnosis = fields.Str(required=False, validate=Length(max=500))
 
 
 # ============================================================
-# PATIENT UPDATE SCHEMA (doctor only)
+# PATIENT UPDATE (doctor only)
 # ============================================================
 class PatientUpdateSchema(Schema):
     id = fields.Int(required=True)
-    diagnosis = fields.Str(required=True)
+    diagnosis = fields.Str(required=True, validate=Length(min=1, max=500))
 
     @validates("diagnosis")
     def validate_diag(self, value, **kwargs):
         if len(value.strip()) == 0:
             raise ValidationError("Diagnosis cannot be empty")
+        # Healthcare-safe input length (TR-03161 recommends bounded inputs)
+        if len(value.strip()) > 500:
+            raise ValidationError("Diagnosis too long")
 
 
 # ============================================================
-# APPOINTMENT CREATE SCHEMA (doctor/nurse)
+# APPOINTMENT CREATE (doctor/nurse)
 # ============================================================
 class AppointmentCreateSchema(Schema):
     patient_id = fields.Int(required=True)
     date = fields.DateTime(required=True)
-    description = fields.Str(required=True)
+    description = fields.Str(required=True, validate=Length(min=1, max=500))
 
     @validates("description")
     def validate_description(self, value, **kwargs):
@@ -60,18 +63,15 @@ class AppointmentCreateSchema(Schema):
 
 
 # ============================================================
-# PATIENT SEARCH QUERY SCHEMA (GET /search?q=)
+# PATIENT SEARCH QUERY (GET /search?q=)
 # ============================================================
 class PatientSearchQuerySchema(Schema):
-    q = fields.Str(required=True)
+    q = fields.Str(required=True, validate=Length(min=1, max=50))
 
     @validates("q")
     def validate_query(self, value, **kwargs):
-        value = value.strip()
-        if len(value) == 0:
+        if len(value.strip()) == 0:
             raise ValidationError("Query cannot be empty")
-        if len(value) > 50:
-            raise ValidationError("Query too long (max 50 chars)")
 
 
 # ============================================================
@@ -101,7 +101,7 @@ def validate_json(schema_cls):
 
 
 # ============================================================
-# QUERY PARAM VALIDATOR for GET requests
+# QUERY PARAM VALIDATOR for GET
 # ============================================================
 def validate_query(schema_cls):
     def decorator(fn):
