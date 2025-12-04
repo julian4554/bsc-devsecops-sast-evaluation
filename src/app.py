@@ -64,15 +64,24 @@ def create_app():
     def fhir_patient_view(patient_id):
         return render_template("fhir_viewer.html", patient_id=patient_id)
 
-    # =============================
-    # Security Headers (TR-03161)
-    # =============================
-    @app.after_request
-    # src/app.py (Auszug)
-
-    # =============================
-    # Security Headers (TR-03161)
-    # =============================
+    # =========================================================================
+    # SICHERHEITS-HEADER (IMPLEMENTIERUNG NACH BSI TR-03161 O.Arch_9)
+    # =========================================================================
+    # ZWECK:
+    # Härtung der Webanwendung gegen Client-Side-Attacken wie XSS, Clickjacking
+    # und MIME-Sniffing durch Setzen von HTTP-Response-Header.
+    #
+    #
+    # Manuelle Implementierung ("Hardcoded Strings") statt Nutzung externer
+    # Bibliotheken (z.B. Flask-Talisman, Secure).
+    #
+    # BEGRÜNDUNG:
+    # 1. Transparenz für SAST-Tools: CodeQL und Semgrep können explizite
+    #    Header-Strings und deren Werte direkt im AST (Abstract Syntax Tree)
+    #    analysieren. Weniger Blackbox Gefühl.
+    # 2. Evaluierbarkeit: Ermöglicht das gezielte Einbauen von Fehlkonfigurationen
+    #    (z.B. schwache CSP), um die Erkennungsleistung der Tools zu messen.
+    # =========================================================================
     @app.after_request
     def set_security_headers(response):
         # ----------------------------------------------------

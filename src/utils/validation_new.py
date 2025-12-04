@@ -1,7 +1,7 @@
 from functools import wraps
 from flask import request, jsonify
 from marshmallow import Schema, fields, ValidationError, validates
-from marshmallow.validate import Length
+from marshmallow.validate import Length, And, Regexp
 
 
 # ============================================================
@@ -12,6 +12,31 @@ class LoginSchema(Schema):
     password = fields.Str(required=True, validate=Length(min=1, max=200))
 
 
+# ============================================================
+# PASSWORD UPDATE SCHEMA (NEU: für O.Pass_1)
+# ============================================================
+class PasswordUpdateSchema(Schema):
+    # Altes Passwort für Re-Authentifizierung (O.Auth_11)
+    current_password = fields.Str(required=True)
+
+    # Neues Passwort mit BSI-konformen Regeln (O.Pass_1)
+    new_password = fields.Str(
+        required=True,
+        validate=And(
+            Length(min=12, max=128, error="Passwort muss mind. 12 Zeichen lang sein."),
+            Regexp(r".*[A-Z].*", error="Muss einen Großbuchstaben enthalten."),
+            Regexp(r".*[a-z].*", error="Muss einen Kleinbuchstaben enthalten."),
+            Regexp(r".*[0-9].*", error="Muss eine Zahl enthalten."),
+            Regexp(r".*[^A-Za-z0-9].*", error="Muss ein Sonderzeichen enthalten.")
+        )
+    )
+
+    confirm_password = fields.Str(required=True)
+
+    @validates("confirm_password")
+    def validate_match(self, value, **kwargs):
+        if request.get_json().get("new_password") != value:
+            raise ValidationError("Passwörter stimmen nicht überein.")
 # ============================================================
 # PATIENT SEARCH SCHEMA (POST – optional)
 # ============================================================
