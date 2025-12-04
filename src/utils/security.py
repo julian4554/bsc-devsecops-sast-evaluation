@@ -1,15 +1,4 @@
 # src/utils/security.py
-# ============================================================
-# SECURITY UTILITIES (DB-FREE)
-# ============================================================
-# Enthält:
-# - PBKDF2 Passwort-Hashing
-# - Passwort-Verifikation
-# - Token-Generierung
-# - Rollenbasierte Zugriffskontrolle (RBAC)
-#
-# ============================================================
-
 import base64
 import hashlib
 import hmac
@@ -21,16 +10,10 @@ from flask import request, jsonify, g
 
 
 # -------------------------------------------------------
-# Passwort-Hashing (PBKDF2 – BSI/DSGVO-konform)
+# Passwort-Hashing (PBKDF2)
 # -------------------------------------------------------
 
 def hash_password(password: str) -> str:
-    """
-    Starkes PBKDF2-HMAC-SHA256 Hashing:
-    - 16 Byte Salt
-    - 200.000 Iterationen (BSI-Level)
-    - Rückgabe: base64(salt + hash)
-    """
     if not isinstance(password, str):
         raise ValueError("Password must be a string")
 
@@ -45,9 +28,6 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    """
-    Verifiziert ein Passwort gegen einen gespeicherten PBKDF2-Hash.
-    """
     try:
         raw = base64.b64decode(stored_hash.encode("ascii"))
     except Exception:
@@ -69,14 +49,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return hmac.compare_digest(stored_dk, new_dk)
 
 
-# -------------------------------------------------------
-# Token-Generierung
-# -------------------------------------------------------
-
 def generate_token() -> str:
-    """
-    Erstellt ein kryptografisch starkes, URL-sicheres Session-Token.
-    """
     return secrets.token_urlsafe(32)
 
 
@@ -84,27 +57,31 @@ def generate_token() -> str:
 # Rollenbasierte Zugriffskontrolle (RBAC)
 # -------------------------------------------------------
 
-def require_role(allowed_roles: list[str]):
+def require_role(allowed_roles: list[str] | None):
     """
     Decorator für API-Endpunkte.
-    Zugriff nur, wenn der Nutzer authentifiziert ist UND die Rolle passt.
-    Beispiel:
-        @require_role(["doctor", "nurse"])
+
+    :param allowed_roles: Liste erlaubter Rollen (z.B. ["doctor"]).
+                          Wenn None übergeben wird, ist jeder authentifizierte
+                          Nutzer erlaubt (Login required only).
     """
 
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-
-            # Der Authentication-Layer (middleware) setzt g.current_user
+            # Authentifizierung prüfen
             user = getattr(g, "current_user", None)
-
             if user is None:
                 return jsonify({"error": "Authentication required"}), 401
 
-            if user["role"] not in allowed_roles:
-                return jsonify({"error": "Forbidden"}), 403
+            # Autorisierung prüfen (nur wenn Rollen definiert sind)
+            # KORREKTUR: Prüfung nur, wenn allowed_roles nicht None ist
+            if allowed_roles is not None:
+                if user["role"] not in allowed_roles:
+                    return jsonify({"error": "Forbidden"}), 403
 
             return fn(*args, **kwargs)
+
         return wrapper
+
     return decorator

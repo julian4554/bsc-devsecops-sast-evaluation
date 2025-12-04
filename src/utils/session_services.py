@@ -1,19 +1,21 @@
 # src/utils/session_services.py
-# ============================================================
-# SESSION SERVICE – DB-Schicht für Sessions
-# ============================================================
-
 from datetime import datetime, timedelta
+from flask import current_app  # KORREKTUR: Zugriff auf Config
 from database.db import fetch_one, execute
 from utils.security import generate_token
 
 
-def create_session(user_id: int, lifetime_minutes: int = 60) -> str:
+def create_session(user_id: int) -> str:
     """
     Erstellt einen neuen Session-Eintrag in der Datenbank.
+    Liest die Lifetime dynamisch aus der App-Config.
     """
     token = generate_token()
     now = datetime.utcnow()
+
+    # KORREKTUR: Wert aus Config laden (Fallback 60 Min)
+    lifetime_minutes = current_app.config.get("SESSION_LIFETIME_MINUTES", 60)
+
     expires = now + timedelta(minutes=lifetime_minutes)
 
     execute(
@@ -28,9 +30,6 @@ def create_session(user_id: int, lifetime_minutes: int = 60) -> str:
 
 
 def get_user_by_token(token: str):
-    """
-    Liefert den Benutzer zur Session aus der Datenbank oder None.
-    """
     return fetch_one(
         """
         SELECT u.id, u.username, u.role, s.expires_at
@@ -43,7 +42,4 @@ def get_user_by_token(token: str):
 
 
 def remove_session(token: str):
-    """
-    Löscht einen Session-Eintrag aus der Datenbank.
-    """
     execute("DELETE FROM sessions WHERE token = ?", (token,))

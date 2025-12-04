@@ -7,6 +7,7 @@ from database.db import fetch_one, execute
 from utils.logging_utils import audit_log
 from utils.security import verify_password, hash_password, require_role
 
+# KORREKTUR: remove_session statt delete_session importieren
 from utils.session_services import create_session, remove_session
 from utils.validation_new import validate_json, LoginSchema, PasswordUpdateSchema
 
@@ -34,7 +35,6 @@ def login():
         return jsonify({"error": "Authentication failed"}), 401
 
     if user is None:
-        # Generische Fehlermeldung (User Enumeration verhindern)
         return jsonify({"error": "Authentication failed"}), 401
 
     # 2. Prüfen, ob gesperrt (O.Auth_7)
@@ -51,10 +51,8 @@ def login():
 
     # 3. Passwort prüfen
     if not verify_password(password, user["password"]):
-        # FEHLSCHLAG: Counter erhöhen
         new_failed = (user["failed_attempts"] or 0) + 1
 
-        # Sperren nach 5 Versuchen?
         if new_failed >= 5:
             lock_duration = 15  # Minuten
             locked_until = (datetime.utcnow() + timedelta(minutes=lock_duration)).isoformat()
@@ -94,7 +92,7 @@ def login():
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
     """
-    Beendet die Session sicher durch Löschen des Tokens aus der DB.
+    Beendet die Session sicher.
     """
     auth_header = request.headers.get("Authorization")
     token = None
@@ -103,11 +101,10 @@ def logout():
         token = auth_header.split(" ")[1]
 
     if token:
-        # Hier nutzen wir jetzt korrekt remove_session
         remove_session(token)
 
-    # Logging
-    user_id = g.user["id"] if hasattr(g, "user") and g.user else None
+    # KORREKTUR: g.current_user statt g.user nutzen!
+    user_id = g.current_user["id"] if hasattr(g, "current_user") and g.current_user else None
     if user_id:
         audit_log(user_id, "LOGOUT", "User", user_id, success=True)
 
@@ -115,13 +112,14 @@ def logout():
 
 
 @auth_bp.route("/change-password", methods=["POST"])
-@require_role(None)  # Jeder eingeloggte User
+@require_role(None)  # None bedeutet jetzt: Jeder eingeloggte User darf das (siehe utils/security.py)
 @validate_json(PasswordUpdateSchema)
 def change_password():
     """
     Passwort ändern: Prüft altes PW, verhindert Wiederverwendung, setzt neues PW.
     """
-    user_id = g.user["id"]
+    # KORREKTUR: g.current_user statt g.user nutzen!
+    user_id = g.current_user["id"]
     data = request.validated_data
 
     old_password = data["old_password"]
