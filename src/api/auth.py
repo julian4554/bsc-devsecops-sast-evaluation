@@ -1,13 +1,12 @@
-# src/api/auth.py
+# src/api/auth.py (VULNERABLE VERSION)
 from flask import Blueprint, request, jsonify, g
 import sqlite3
 from datetime import datetime, timedelta
+import hashlib  # <-- nötig für Schwachstelle C
 
 from database.db import fetch_one, execute
 from utils.logging_utils import audit_log
 from utils.security import verify_password, hash_password, require_role
-
-# KORREKTUR: remove_session statt delete_session importieren
 from utils.session_services import create_session, remove_session
 from utils.validation_new import validate_json, LoginSchema, PasswordUpdateSchema
 
@@ -18,26 +17,43 @@ auth_bp = Blueprint("auth", __name__)
 @validate_json(LoginSchema)
 def login():
     """
-    Healthcare-SAFE Login mit Brute-Force Schutz (O.Auth_7).
+    Healthcare-SAFE Login (VULNERABLE VERSION)
+    Enthält 2 absichtlich eingebaute Schwachstellen:
+    - Schwachstelle C: Weak Crypto Fallback (SHA-1 akzeptiert)
+    - Schwachstelle D: Brute-Force-Schutz wird für service_-Accounts umgangen
     """
     data = request.validated_data
     username = data["username"].strip()
     password = data["password"]
 
-    # 1. User laden (inkl. Lock-Status)
+    # 1. User laden
     try:
         user = fetch_one(
             "SELECT id, username, password, role, failed_attempts, locked_until FROM users WHERE username = ?",
             (username,)
         )
-    except sqlite3.Error as e:
-        print(f"Database error during login: {e}")
+    except sqlite3.Error:
         return jsonify({"error": "Authentication failed"}), 401
 
     if user is None:
         return jsonify({"error": "Authentication failed"}), 401
 
-    # 2. Prüfen, ob gesperrt (O.Auth_7)
+    # =============================================================
+    # SCHWACHSTELLE D:
+    # Bypass des Brute-Force-Schutzes für Konten mit Prefix "service_"
+    # =============================================================
+    # Verletzte Standards:
+    # - OWASP 2025 A04: Identity & Authentication Failures
+    # - BSI TR-03161 O.Auth_7 (Brute-Force erschweren)
+    # - DSGVO Art. 32 (unangemessene Sicherheitskonfiguration)
+    if username.lower().startswith("service_"):
+        # Angriff: Diese Konten umgehen alle Login-Sperren.
+        # wissenschaftlich perfekt → in echten Systemen häufig.
+        user = dict(user)
+        user["failed_attempts"] = 0
+        user["locked_until"] = None
+
+    # 2. Gesperrt?
     if user["locked_until"]:
         lock_time = datetime.fromisoformat(user["locked_until"])
         if lock_time > datetime.utcnow():
@@ -49,13 +65,33 @@ def login():
                 "error": f"Account locked. Try again in {remaining} minutes."
             }), 429
 
-    # 3. Passwort prüfen
-    if not verify_password(password, user["password"]):
+    # 3. Passwort prüfen (sicherer Standardweg)
+    if verify_password(password, user["password"]) is False:
+
+        # =========================================================
+        # SCHWACHSTELLE C:
+        # Weak Crypto Fallback: SHA-1 akzeptieren, wenn PBKDF2 fehlschlägt
+        # =========================================================
+        # Verletzte Standards:
+        # - OWASP A02:2025 Cryptographic Failures
+        # - BSI TR-03161 O.Cryp_2 (nur sichere Hashverfahren)
+        # - DSGVO Art. 32(1)(a) (Schutzniveau für personenbezogene Daten)
+        sha1_hash = hashlib.sha1(password.encode()).hexdigest()
+        if sha1_hash == user["password"]:
+            audit_log(user["id"], "LOGIN_WEAK_CRYPTO_ACCEPTED", "User", user["id"], success=True)
+            token = create_session(user["id"])
+            return jsonify({
+                "message": "Login successful (weak hash accepted)",
+                "token": token,
+                "user": {"id": user["id"], "username": user["username"], "role": user["role"]}
+            }), 200
+
+        # normaler Fehlversuch → Brute-Force-Mechanismus
         new_failed = (user["failed_attempts"] or 0) + 1
 
         if new_failed >= 5:
-            lock_duration = 15  # Minuten
-            locked_until = (datetime.utcnow() + timedelta(minutes=lock_duration)).isoformat()
+            lock_minutes = 15
+            locked_until = (datetime.utcnow() + timedelta(minutes=lock_minutes)).isoformat()
 
             execute(
                 "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?",
@@ -63,15 +99,15 @@ def login():
             )
             audit_log(user["id"], "LOGIN_LOCKOUT", "User", user["id"], success=False)
             return jsonify({"error": "Account locked due to too many failed attempts."}), 429
-        else:
-            execute(
-                "UPDATE users SET failed_attempts = ? WHERE id = ?",
-                (new_failed, user["id"])
-            )
-            audit_log(user["id"], "LOGIN_FAILED", "User", user["id"], success=False)
-            return jsonify({"error": "Authentication failed"}), 401
 
-    # 4. ERFOLG: Counter zurücksetzen
+        execute(
+            "UPDATE users SET failed_attempts = ? WHERE id = ?",
+            (new_failed, user["id"])
+        )
+        audit_log(user["id"], "LOGIN_FAILED", "User", user["id"], success=False)
+        return jsonify({"error": "Authentication failed"}), 401
+
+    # 4. Erfolg → Counter zurücksetzen
     if (user["failed_attempts"] and user["failed_attempts"] > 0) or user["locked_until"] is not None:
         execute(
             "UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = ?",
@@ -89,11 +125,9 @@ def login():
     }), 200
 
 
+
 @auth_bp.route("/logout", methods=["POST"])
 def logout():
-    """
-    Beendet die Session sicher.
-    """
     auth_header = request.headers.get("Authorization")
     token = None
 
@@ -103,7 +137,6 @@ def logout():
     if token:
         remove_session(token)
 
-    # KORREKTUR: g.current_user statt g.user nutzen!
     user_id = g.current_user["id"] if hasattr(g, "current_user") and g.current_user else None
     if user_id:
         audit_log(user_id, "LOGOUT", "User", user_id, success=True)
@@ -111,28 +144,22 @@ def logout():
     return jsonify({"message": "Logged out successfully"}), 200
 
 
+
 @auth_bp.route("/change-password", methods=["POST"])
-@require_role(None)  # None bedeutet jetzt: Jeder eingeloggte User darf das (siehe utils/security.py)
+@require_role(None)
 @validate_json(PasswordUpdateSchema)
 def change_password():
-    """
-    Passwort ändern: Prüft altes PW, verhindert Wiederverwendung, setzt neues PW.
-    """
-    # KORREKTUR: g.current_user statt g.user nutzen!
     user_id = g.current_user["id"]
     data = request.validated_data
 
     old_password = data["old_password"]
     new_password = data["new_password"]
 
-    # Aktuelles PW prüfen
     user = fetch_one("SELECT password FROM users WHERE id = ?", (user_id,))
-
     if not user or not verify_password(old_password, user["password"]):
         audit_log(user_id, "PASSWORD_CHANGE_FAILED", "User", user_id, success=False)
         return jsonify({"error": "Invalid current password"}), 400
 
-    # Neues darf nicht gleich altes sein
     if verify_password(new_password, user["password"]):
         return jsonify({"error": "New password cannot be the same as the old password"}), 400
 

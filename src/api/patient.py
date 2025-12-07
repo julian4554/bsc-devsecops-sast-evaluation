@@ -1,113 +1,106 @@
-# src/api/patient.py
+# src/api/patient.py (VULNERABLE VERSION)
 from flask import Blueprint, request, jsonify, g
-from database.db import fetch_one, execute
-from utils.security import require_role
-from utils.logging_utils import audit_log
-from utils.validation_new import validate_json, PatientUpdateSchema, PatientCreateSchema
-import sqlite3
+from database.db import execute, fetch_one
+import traceback  # Nötig für A10 Schwachstelle
 
 patient_bp = Blueprint("patient", "__name__")
 
 
 # ============================================================
-# GET /patient/<id>  (doctor, nurse)
+# GET /patient/<id>
 # ============================================================
 @patient_bp.route("/patient/<int:patient_id>", methods=["GET"])
-@require_role(["doctor", "nurse"])
 def get_patient(patient_id):
     """
-    Healthcare-SAFE Patient Lookup
-    DSGVO / TR-03161:
-    - Doctor & Nurse dürfen Basisdaten sehen
-    - Admin darf NICHT lesen
-    - Minimalprinzip
+    VULNERABLE ENDPOINT: Fokus A10
+
+    Schwachstelle:
+    - A10:2025 Mishandling of Exceptional Conditions (CWE-209)
+      Wir geben bei Fehlern interne Systemdetails (Stacktrace) preis.
     """
 
-    role = g.current_user["role"]
-
-    if role == "admin":
-        return jsonify({"error": "Not permitted"}), 403
-
-    if patient_id <= 0:
-        audit_log(None, "READ_PATIENT_INVALID_ID", "Patient", patient_id, success=False)
-        return jsonify({"error": "Invalid patient ID"}), 400
+    # Authentifizierung (Rudimentär, damit der Flow funktioniert)
+    if not g.current_user:
+        return jsonify({"error": "Auth required"}), 401
 
     try:
-        patient = fetch_one(
-            """
-            SELECT id, first_name, last_name, birthdate, mrn, diagnosis
-            FROM patients
-            WHERE id = ?
-            """,
-            (patient_id,)
-        )
-    except sqlite3.Error:
-        audit_log(None, "READ_PATIENT_DB_ERROR", "Patient", patient_id, success=False)
-        return jsonify({"error": "Database error"}), 500
+        # SQL ist hier SICHER (Parameter Binding), damit wir keine
+        # SQL-Injection-Findings provozieren, die das Ergebnis verwässern.
+        patient = fetch_one("SELECT * FROM patients WHERE id = ?", (patient_id,))
 
-    if patient is None:
-        audit_log(g.current_user["id"], "READ_PATIENT_NOT_FOUND", "Patient", patient_id, success=False)
-        return jsonify({"error": "Patient not found"}), 404
+        if not patient:
+            return jsonify({"error": "Not found"}), 404
 
-    # Datenminimierung
-    response = {
-        "id": patient["id"],
-        "first_name": patient["first_name"],
-        "last_name": patient["last_name"],
-        "birthdate": patient["birthdate"],
-        "mrn": patient["mrn"],
-    }
+        return jsonify(dict(patient)), 200
 
-    if role == "doctor":
-        response["diagnosis"] = patient["diagnosis"]
-
-    audit_log(g.current_user["id"], "READ_PATIENT_SUCCESS", "Patient", patient_id, success=True)
-    return jsonify(response), 200
+    except Exception as e:
+        # =========================================================
+        # [X] SCHWACHSTELLE: A10 (Mishandling of Exceptional Conditions)
+        # =========================================================
+        # CWE-209: Generation of Error Message Containing Sensitive Information
+        # Wir geben den vollen Stacktrace und Library-Versionen aus.
+        return jsonify({
+            "status": "error",
+            "exception": type(e).__name__,
+            "trace": traceback.format_exc()  # <--- Verrät Code-Pfad & Interna
+        }), 500
 
 
 # ============================================================
-# POST /patient/update  (doctor only)
+# POST /patient/update
 # ============================================================
 @patient_bp.route("/patient/update", methods=["POST"])
-@require_role(["doctor"])
-@validate_json(PatientUpdateSchema)     # <<< WICHTIG: Marshmallow-Validation
 def update_patient():
     """
-    Diagnose-Update durch Ärzte
-    Jetzt TR-03161-O.Source_1/-2 konform:
-    - Eingaben formal validiert
-    - Keine manuelle isinstance-Prüfung
-    - Einheitliches Schema für alle Endpoints
+    VULNERABLE ENDPOINT: Fokus A08
+
+    Schwachstelle:
+    - A08:2025 Software and Data Integrity Failures (Mass Assignment / CWE-915)
+      Benutzer können schreibgeschützte Felder (mrn, id) überschreiben.
     """
 
-    data = request.validated_data
-    patient_id = data["id"]
-    new_diagnosis = data["diagnosis"]
-
-    # Patient existiert?
-    try:
-        exists = fetch_one("SELECT id FROM patients WHERE id = ?", (patient_id,))
-    except sqlite3.Error:
-        audit_log(g.current_user["id"], "UPDATE_PATIENT_DB_ERROR", "Patient", patient_id, success=False)
-        return jsonify({"error": "Database error"}), 500
-
-    if exists is None:
-        audit_log(g.current_user["id"], "UPDATE_PATIENT_NOT_FOUND", "Patient", patient_id, success=False)
-        return jsonify({"error": "Patient not found"}), 404
+    if not g.current_user:
+        return jsonify({"error": "Auth required"}), 401
 
     try:
-        execute(
-            "UPDATE patients SET diagnosis = ? WHERE id = ?",
-            (new_diagnosis, patient_id)
-        )
-    except sqlite3.Error:
-        audit_log(g.current_user["id"], "UPDATE_PATIENT_DIAGNOSIS_DB_ERROR", "Patient", patient_id, success=False)
-        return jsonify({"error": "Database update error"}), 500
+        # Input: Raw JSON ohne Schema-Validierung
+        data = request.get_json(silent=True) or {}
+        p_id = data.get("id")
 
-    audit_log(g.current_user["id"], "UPDATE_PATIENT_DIAGNOSIS_SUCCESS", "Patient", patient_id, success=True)
+        if not p_id:
+            raise ValueError("Missing Patient ID")
 
-    return jsonify({
-        "message": "Patient updated successfully",
-        "patient_id": patient_id,
-        "diagnosis": new_diagnosis
-    }), 200
+        # =========================================================
+        # [X] SCHWACHSTELLE: A08 (Mass Assignment)
+        # =========================================================
+        # DSGVO Art. 5 (Integrität): Daten werden ungeprüft übernommen.
+        # Wir filtern die Keys NICHT gegen eine Allowlist.
+        # Angreifer sendet: {"id": 1, "diagnosis": "...", "mrn": "FAKE-123"}
+
+        # Dynamischer Query-Bau basierend auf User-Input-Keys
+        columns = [k for k in data.keys() if k != "id"]
+
+        if not columns:
+            return jsonify({"message": "Nothing to update"}), 200
+
+        # Parameter Binding nutzen wir trotzdem (um SQLi Findings zu vermeiden)
+        # Das Tool soll den LOGIK-Fehler (Mass Assignment) finden, nicht Syntax-Fehler.
+        set_clause = ", ".join([f"{col} = ?" for col in columns])
+        values = [data[col] for col in columns]
+        values.append(p_id)
+
+        query = f"UPDATE patients SET {set_clause} WHERE id = ?"
+
+        execute(query, tuple(values))
+
+        return jsonify({
+            "message": "Patient updated",
+            "updated_fields": columns  # Beweis für den Angreifer, was geklappt hat
+        }), 200
+
+    except Exception as e:
+        # Auch hier: A10 (Info Leak)
+        return jsonify({
+            "error": "Update failed",
+            "debug_trace": traceback.format_exc()
+        }), 500

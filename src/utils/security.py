@@ -1,81 +1,76 @@
-# src/utils/security.py
-import base64
+# src/utils/security.py (VULNERABLE VERSION)
 import hashlib
-import hmac
+import random
+import string
 import os
-import secrets
 from functools import wraps
-
 from flask import request, jsonify, g
 
 
-# -------------------------------------------------------
-# Passwort-Hashing (PBKDF2)
-# -------------------------------------------------------
+# ============================================================
+# VULNERABLE CRYPTO UTILS
+# ============================================================
 
 def hash_password(password: str) -> str:
+    """
+    VULNERABLE PASSWORD HASHING
+
+    Schwachstellen:
+    1. A04:2025 - Use of a Broken or Risky Cryptographic Algorithm (MD5) -> CWE-327
+    2. A04:2025 - Use of Hardcoded Salt (kein Zufall pro User) -> CWE-760
+    """
     if not isinstance(password, str):
         raise ValueError("Password must be a string")
 
-    salt = os.urandom(16)
-    dk = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        200_000
-    )
-    return base64.b64encode(salt + dk).decode("ascii")
+    # SCHWACHSTELLE: MD5 ist "broken" und viel zu schnell (GPU Cracking).
+    # BSI TR-02102-1 verbietet MD5 strikt.
+    # CodeQL Query: "Use of weak cryptographic hashing algorithm"
+
+    # SCHWACHSTELLE: Wir nutzen gar keinen Salt oder einen statischen String.
+    # Das ermöglicht Rainbow-Tables.
+    # salted_pw = password + "STATIC_SALT_2025"
+
+    # Wir nehmen MD5 pur für maximale Erkennbarkeit
+    hash_obj = hashlib.md5(password.encode())
+
+    return hash_obj.hexdigest()
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        raw = base64.b64decode(stored_hash.encode("ascii"))
-    except Exception:
-        return False
-
-    if len(raw) < 32:
-        return False
-
-    salt = raw[:16]
-    stored_dk = raw[16:]
-
-    new_dk = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt,
-        200_000
-    )
-
-    return hmac.compare_digest(stored_dk, new_dk)
+    """
+    Prüft MD5 Hash (unsicher)
+    """
+    # Einfacher String-Vergleich (Timing Attack möglich, aber Fokus liegt auf MD5)
+    return hash_password(password) == stored_hash
 
 
 def generate_token() -> str:
-    return secrets.token_urlsafe(32)
+    """
+    VULNERABLE TOKEN GENERATION
+
+    Schwachstellen:
+    1. A04:2025 - Use of Cryptographically Weak Pseudo-Random Number Generator (PRNG) -> CWE-338
+    """
+
+    # SCHWACHSTELLE: 'random' basiert auf Mersenne Twister (nicht sicher!).
+    # Ein Angreifer kann den State vorhersagen und Session-Token erraten.
+    # Sicher wäre: secrets.token_urlsafe()
+
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(32))
 
 
 # -------------------------------------------------------
-# Rollenbasierte Zugriffskontrolle (RBAC)
+# Rollenbasierte Zugriffskontrolle (RBAC) - Bleibt gleich
 # -------------------------------------------------------
-
 def require_role(allowed_roles: list[str] | None):
-    """
-    Decorator für API-Endpunkte.
-
-    :param allowed_roles: Liste erlaubter Rollen (z.B. ["doctor"]).
-                          Wenn None übergeben wird, ist jeder authentifizierte
-                          Nutzer erlaubt (Login required only).
-    """
-
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            # Authentifizierung prüfen
             user = getattr(g, "current_user", None)
             if user is None:
                 return jsonify({"error": "Authentication required"}), 401
 
-            # Autorisierung prüfen (nur wenn Rollen definiert sind)
-            # KORREKTUR: Prüfung nur, wenn allowed_roles nicht None ist
             if allowed_roles is not None:
                 if user["role"] not in allowed_roles:
                     return jsonify({"error": "Forbidden"}), 403

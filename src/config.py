@@ -1,55 +1,72 @@
-# src/config.py
+# src/config.py (VULNERABLE VERSION)
 import os
-import secrets
 from pathlib import Path
 
 
 class Config:
     """
-    Basis-Konfiguration (Secure by Default).
-    Diese Klasse definiert die sicheren Standardwerte für die Produktion.
+    VULNERABLE CONFIGURATION
+
+    Implementierte Schwachstellen für Thesis (A02:2025 Security Misconfiguration):
+    1. Insecure Defaults: Hardcoded Secret Key & Debug Mode Enabled.
+    2. Missing Hardening: Unsichere Cookie-Attribute (kein HttpOnly/Secure).
     """
 
     # ====== Pfade ======
     BASE_DIR = Path(__file__).resolve().parent
-    # Datenbank liegt ein Verzeichnis über src (im Root des Projekts)
     DATABASE_PATH = BASE_DIR.parent / "healthcare.db"
 
-    # ====== Sicherheit ======
-    # In Produktion MUSS dies per Environment Variable gesetzt sein!
-    SECRET_KEY = os.environ.get(
-        "SECRET_KEY",
-        secrets.token_hex(32)  # Fallback: Sicherer Zufallswert
-    )
+    # =========================================================
+    # [X] SCHWACHSTELLE 1: HARDCODED SECRET (Insecure Default)
+    # =========================================================
+    # OWASP A02 & A04: Verwendung von Standard-Passwörtern/Keys.
+    # Ein Angreifer kann diesen Key nutzen, um Session-Cookies zu fälschen (Hijacking).
+    # BSI-Verstoß: Nutzung bekannter Standardwerte.
+    SECRET_KEY = "change_me_123456_default"
 
-    # ====== Session-Härtung (O.Auth_10 / O.Source_10) ======
-    SESSION_COOKIE_HTTPONLY = True  # Schutz gegen XSS
-    SESSION_COOKIE_SAMESITE = "Strict"  # Starker Schutz gegen CSRF
+    # =========================================================
+    # [X] SCHWACHSTELLE 2: MISSING COOKIE HARDENING
+    # =========================================================
+    # OWASP A02: "The server... directives are not set to secure values."
 
-    # Timeout-Konfiguration
-    SESSION_LIFETIME_MINUTES = int(os.environ.get("SESSION_LIFETIME_MINUTES", "60"))
+    # False = Cookies können per JavaScript (XSS) gestohlen werden.
+    SESSION_COOKIE_HTTPONLY = False
 
-    # ====== Standard-Verhalten (Härtung für O.Source_6) ======
-    # Debug-Modus standardmäßig AUS!
-    DEBUG = False
-    TESTING = False
-    # Secure Flag standardmäßig AN (erfordert HTTPS)!
-    SESSION_COOKIE_SECURE = True
+    # False = Cookies werden im Klartext über HTTP gesendet (Man-in-the-Middle Gefahr).
+    SESSION_COOKIE_SECURE = False
+
+    # None = Kein CSRF-Schutz durch den Browser.
+    SESSION_COOKIE_SAMESITE = None
+
+    # Timeout (Optional): Unendliche Sessions sind auch ein Risiko
+    SESSION_LIFETIME_MINUTES = 60 * 24 * 365  # 1 Jahr gültig
+
+    # =========================================================
+    # [X] SCHWACHSTELLE 1 (Fortsetzung): DEBUG MODE ENABLED
+    # =========================================================
+    # OWASP A02: "Error handling reveals stack traces".
+    # Debugger erlaubt oft Code Execution oder zeigt Env-Vars an.
+    DEBUG = True
+    TESTING = True
 
 
 class DevelopmentConfig(Config):
     """
-    Konfiguration für lokale Entwicklung.
-    Erlaubt Debugging und HTTP.
+    Entwicklungsumgebung
     """
     DEBUG = True
-    SESSION_COOKIE_SECURE = False  # Erlaubt Login über http://localhost
+    SESSION_COOKIE_SECURE = False
 
 
 class ProductionConfig(Config):
     """
-    Zwingende Konfiguration für den Live-Betrieb.
-    Erbt von Config, stellt aber sicher, dass keine Dev-Settings aktiv sind.
+    VULNERABLE PRODUCTION CONFIG
+
+    Hier wird der Fehler "manifestiert": Auch in der Produktion
+    erzwingen wir keine Sicherheit. Wir erben einfach die unsicheren Defaults.
     """
-    DEBUG = False
-    SESSION_COOKIE_SECURE = True  # Zwingend HTTPS erforderlich!
+    # Fataler Fehler: Debugger läuft live im Krankenhaus-Netz!
+    DEBUG = True
+
+    # Fataler Fehler: Login geht über unverschlüsseltes HTTP.
+    SESSION_COOKIE_SECURE = False
