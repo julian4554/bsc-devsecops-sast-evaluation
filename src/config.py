@@ -1,5 +1,4 @@
 # src/config.py (VULNERABLE VERSION)
-import os
 from pathlib import Path
 
 

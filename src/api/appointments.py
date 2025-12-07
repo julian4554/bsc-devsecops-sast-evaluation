@@ -6,7 +6,7 @@ from utils.logging_utils import audit_log
 from utils.validation_new import validate_json, AppointmentCreateSchema
 import sqlite3
 import logging                       # [NEU – für Schwachstelle A]
-from datetime import datetime
+
 
 appointments_bp = Blueprint("appointments", __name__)
 
