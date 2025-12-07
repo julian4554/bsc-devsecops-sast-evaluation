@@ -6,10 +6,8 @@ on:
   pull_request:
     branches: ["main", "insecure"]
 
-
 jobs:
   semgrep:
-    name: Run Semgrep
     runs-on: ubuntu-latest
 
     permissions:
@@ -30,13 +28,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      - name: Run Semgrep security scan (non-blocking)
+      - name: Run Semgrep security scan (strong rules)
         run: |
-          semgrep --config=auto --json > semgrep-results.json || true
-
-      - name: Generate SARIF
-        run: |
-          semgrep --config=auto --sarif > semgrep.sarif || true
+          semgrep --config=p/security-audit --config=p/secrets --sarif > semgrep.sarif || true
 
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v4
